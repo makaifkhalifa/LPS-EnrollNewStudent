@@ -12,18 +12,28 @@
     return String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
   }
 
-  function hideLegalRows() {
+  function hideTicketRows() {
     if (!window.$j) {
       return;
     }
 
+    // Remove Legal Name/Legal Gender rows (including dynamically injected rows).
     $j("#legalNameSourceDiv, #legalGenderSourceDiv").remove();
     $j("#legalLastName").closest("tr").remove();
     $j("#legalGenderSelect").closest("tr").remove();
 
+    // Remove MA reporting toggle rows requested in ticket.
+    $j('input[name="state_excludefromreporting"]').closest("tr").remove();
+    $j('input[name="MA_DOERptFlag"]').closest("tr").remove();
+
     $j("td.bold").each(function () {
       var label = text($j(this).text()).toLowerCase();
-      if (label.indexOf("legal name") === 0 || label === "legal gender") {
+      if (
+        label.indexOf("legal name") === 0 ||
+        label === "legal gender" ||
+        label.indexOf("exclude this student from state reporting") === 0 ||
+        label.indexOf("include this student in the sims report") === 0
+      ) {
         $j(this).closest("tr").remove();
       }
     });
@@ -235,7 +245,7 @@
     var attempts = 0;
     var timer = window.setInterval(function () {
       attempts += 1;
-      hideLegalRows();
+      hideTicketRows();
       installValidationHook();
       if (attempts >= 100) {
         window.clearInterval(timer);
@@ -244,7 +254,7 @@
 
     if (window.MutationObserver && document.body) {
       var observer = new MutationObserver(function () {
-        hideLegalRows();
+        hideTicketRows();
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
