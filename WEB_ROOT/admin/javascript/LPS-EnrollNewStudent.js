@@ -77,6 +77,44 @@
     }
   }
 
+  function findFieldByRowLabel(labelText, fieldType) {
+    var target = text(labelText).toLowerCase();
+    var $found = $j();
+
+    $j("td.bold, span.bold").each(function () {
+      var $label = $j(this);
+      var current = text($label.text()).toLowerCase();
+      if (!current || current.indexOf(target) !== 0) {
+        return;
+      }
+
+      var $row = $label.closest("tr");
+      if (!$row.length) {
+        return;
+      }
+
+      if (fieldType === "select") {
+        $found = $row.find("select").filter(":enabled").first();
+      } else {
+        $found = $row.find("input[type='text'], input:not([type]), textarea").filter(":enabled").first();
+      }
+      return false;
+    });
+
+    return $found;
+  }
+
+  function findField(selectors, rowLabel, fieldType) {
+    var i;
+    for (i = 0; i < selectors.length; i++) {
+      var $el = $j(selectors[i]).filter(":enabled").first();
+      if ($el.length) {
+        return $el;
+      }
+    }
+    return findFieldByRowLabel(rowLabel, fieldType);
+  }
+
   function hasSelectValue(selector) {
     var $el = $j(selector);
     if (!$el.length) {
@@ -109,52 +147,70 @@
   function runCustomValidation() {
     var valid = true;
     var firstMissingSelector = null;
+    var firstMissingField = null;
+    var checks = [
+      {
+        selectors: ['select[name="districtofresidence"]'],
+        rowLabel: "District of Residence",
+        fieldType: "select",
+        errorId: "#invalid_district_of_residence_error"
+      },
+      {
+        selectors: ["#MA_SAS_Resident", 'select[name="MA_SAS_Resident"]'],
+        rowLabel: "Resident",
+        fieldType: "select",
+        errorId: "#invalid_resident_error"
+      },
+      {
+        selectors: ["#MA_SIF_FTE", 'select[name="MA_SIF_FTE"]'],
+        rowLabel: "SIF FTE",
+        fieldType: "select",
+        errorId: "#invalid_sif_fte_error"
+      },
+      {
+        selectors: ["#MA_BirthCity", 'input[name="MA_BirthCity"]'],
+        rowLabel: "City/Town of Birth",
+        fieldType: "text",
+        errorId: "#invalid_birth_city_error"
+      },
+      {
+        selectors: ["#MA_City", 'select[name="MA_City"]'],
+        rowLabel: "City/Town of Residence - Student",
+        fieldType: "select",
+        errorId: "#invalid_city_residence_student_error"
+      }
+    ];
+    var i;
 
-    clearFieldState('select[name="districtofresidence"]');
-    clearFieldState("#MA_SAS_Resident");
-    clearFieldState("#MA_SIF_FTE");
-    clearFieldState("#MA_BirthCity");
-    clearFieldState("#MA_City");
     hideCustomErrors();
-
-    if (!hasSelectValue('select[name="districtofresidence"]')) {
-      valid = false;
-      markFieldMissing('select[name="districtofresidence"]');
-      showError("#invalid_district_of_residence_error");
-      firstMissingSelector = firstMissingSelector || 'select[name="districtofresidence"]';
+    for (i = 0; i < checks.length; i++) {
+      var clearField = findField(checks[i].selectors, checks[i].rowLabel, checks[i].fieldType);
+      if (clearField.length) {
+        clearFieldState(clearField);
+      }
     }
 
-    if (!hasSelectValue("#MA_SAS_Resident")) {
-      valid = false;
-      markFieldMissing("#MA_SAS_Resident");
-      showError("#invalid_resident_error");
-      firstMissingSelector = firstMissingSelector || "#MA_SAS_Resident";
+    for (i = 0; i < checks.length; i++) {
+      var check = checks[i];
+      var $field = findField(check.selectors, check.rowLabel, check.fieldType);
+      var filled = true;
+      if (!$field.length) {
+        continue;
+      }
+
+      filled = check.fieldType === "select" ? hasSelectValue($field) : hasTextValue($field);
+      if (!filled) {
+        valid = false;
+        markFieldMissing($field);
+        showError(check.errorId);
+        firstMissingField = firstMissingField || $field;
+        firstMissingSelector = firstMissingSelector || check.selectors[0];
+      }
     }
 
-    if (!hasSelectValue("#MA_SIF_FTE")) {
-      valid = false;
-      markFieldMissing("#MA_SIF_FTE");
-      showError("#invalid_sif_fte_error");
-      firstMissingSelector = firstMissingSelector || "#MA_SIF_FTE";
-    }
-
-    if (!hasTextValue("#MA_BirthCity")) {
-      valid = false;
-      markFieldMissing("#MA_BirthCity");
-      showError("#invalid_birth_city_error");
-      firstMissingSelector = firstMissingSelector || "#MA_BirthCity";
-    }
-
-    if (!hasSelectValue("#MA_City")) {
-      valid = false;
-      markFieldMissing("#MA_City");
-      showError("#invalid_city_residence_student_error");
-      firstMissingSelector = firstMissingSelector || "#MA_City";
-    }
-
-    if (!valid && firstMissingSelector) {
+    if (!valid && (firstMissingField || firstMissingSelector)) {
       try {
-        var $first = $j(firstMissingSelector);
+        var $first = firstMissingField || $j(firstMissingSelector);
         if ($first.length) {
           $j(document).scrollTop(Math.max($first.offset().top - 120, 0));
           $first.focus();
@@ -165,13 +221,12 @@
     return valid;
   }
 
-  function installValidationHook() {
-    if (typeof window.validateStudentEnrollment !== "function") {
-      return false;
+  function bindSubmitInterceptor() {
+    var form = document.getElementById("studentEnrollmentForm");
+    if (!form || form.__lpsSubmitInterceptorBound) {
+      return;
     }
-    if (window.__lpsValidateEnrollmentWrapped) {
-      return true;
-    }
+    form.__lpsSubmitInterceptorBound = true;
 
     ensureErrorItem("invalid_district_of_residence_error", "You must select a District of Residence.");
     ensureErrorItem("invalid_resident_error", "You must select a Resident value.");
@@ -179,54 +234,23 @@
     ensureErrorItem("invalid_birth_city_error", "You must enter a City/Town of Birth.");
     ensureErrorItem("invalid_city_residence_student_error", "You must select a City/Town of Residence - Student.");
 
-    var originalValidate = window.validateStudentEnrollment;
-    var originalHideErrors = window.hideErrors;
-
-    if (typeof originalHideErrors === "function") {
-      window.hideErrors = function () {
-        originalHideErrors();
-        hideCustomErrors();
-      };
-    }
-
-    window.validateStudentEnrollment = function () {
-      var originalLoadingDialog = window.loadingDialog;
-      var originalJoinApartment = window.joinApartment;
-      var baseValid;
-      var customValid;
-      var overallValid;
-
-      // Run original validation but defer its side effects until both validations pass.
-      window.loadingDialog = function () {};
-      window.joinApartment = function () { return true; };
-
-      baseValid = originalValidate();
-      customValid = runCustomValidation();
-      overallValid = !!(baseValid && customValid);
-
-      window.loadingDialog = originalLoadingDialog;
-      window.joinApartment = originalJoinApartment;
-
-      if (overallValid) {
-        if (typeof window.loadingDialog === "function") {
-          window.loadingDialog();
-        }
-        if (typeof window.joinApartment === "function") {
-          window.joinApartment();
-        }
-      } else {
-        $j(document).scrollTop(0);
+    form.addEventListener("submit", function (event) {
+      if (runCustomValidation()) {
+        return;
       }
 
-      if (window.console && typeof window.console.warn === "function" && !overallValid) {
-        window.console.warn("[LPS-EnrollNewStudent] submit blocked: required fields missing.");
+      event.preventDefault();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
       }
-
-      return overallValid;
-    };
-
-    window.__lpsValidateEnrollmentWrapped = true;
-    return true;
+      if (typeof event.stopPropagation === "function") {
+        event.stopPropagation();
+      }
+      if (window.console && typeof window.console.warn === "function") {
+        window.console.warn("[LPS-EnrollNewStudent] submit blocked: multiple required fields missing.");
+      }
+      return false;
+    }, true);
   }
 
   function init() {
@@ -246,7 +270,7 @@
     var timer = window.setInterval(function () {
       attempts += 1;
       hideTicketRows();
-      installValidationHook();
+      bindSubmitInterceptor();
       if (attempts >= 100) {
         window.clearInterval(timer);
       }

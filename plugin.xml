@@ -4,7 +4,7 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://plugin.powerschool.pearson.com plugin.xsd"
         name="LPS Enroll New Student"
-        version="1.0.3"
+        version="1.0.4"
         description="Customizations for the Enroll New Student admin page.">
     <publisher name="Lawrence Public Schools">
         <contact email="mahammed.khalifa@lawrence.k12.ma.us" />
