@@ -63,6 +63,28 @@
     $j(id).show();
   }
 
+  function scrollToTop() {
+    try {
+      var contentMain = document.getElementById("content-main");
+      if (contentMain) {
+        contentMain.scrollTop = 0;
+      }
+      if (window.$j) {
+        $j(document).scrollTop(0);
+        if (contentMain) {
+          $j(contentMain).scrollTop(0);
+        }
+      } else {
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      }
+    } catch (e) {}
+
+    try {
+      window.scrollTo(0, 0);
+    } catch (e) {}
+  }
+
   function hideCustomErrors() {
     var ids = [
       "#invalid_district_of_residence_error",
@@ -146,8 +168,6 @@
 
   function runCustomValidation() {
     var valid = true;
-    var firstMissingSelector = null;
-    var firstMissingField = null;
     var checks = [
       {
         selectors: ['select[name="districtofresidence"]'],
@@ -203,22 +223,34 @@
         valid = false;
         markFieldMissing($field);
         showError(check.errorId);
-        firstMissingField = firstMissingField || $field;
-        firstMissingSelector = firstMissingSelector || check.selectors[0];
       }
     }
 
-    if (!valid && (firstMissingField || firstMissingSelector)) {
-      try {
-        var $first = firstMissingField || $j(firstMissingSelector);
-        if ($first.length) {
-          $j(document).scrollTop(Math.max($first.offset().top - 120, 0));
-          $first.focus();
-        }
-      } catch (e) {}
+    if (!valid) {
+      scrollToTop();
     }
 
     return valid;
+  }
+
+  function wrapNativeValidation() {
+    if (typeof window.validateStudentEnrollment !== "function") {
+      return;
+    }
+    if (window.validateStudentEnrollment.__lpsWrapped) {
+      return;
+    }
+
+    var original = window.validateStudentEnrollment;
+    var wrapped = function () {
+      var result = original.apply(this, arguments);
+      if (!result) {
+        scrollToTop();
+      }
+      return result;
+    };
+    wrapped.__lpsWrapped = true;
+    window.validateStudentEnrollment = wrapped;
   }
 
   function bindSubmitInterceptor() {
@@ -234,11 +266,16 @@
     ensureErrorItem("invalid_birth_city_error", "You must enter a City/Town of Birth.");
     ensureErrorItem("invalid_city_residence_student_error", "You must select a City/Town of Residence - Student.");
 
+    form.addEventListener("invalid", function () {
+      scrollToTop();
+    }, true);
+
     form.addEventListener("submit", function (event) {
       if (runCustomValidation()) {
         return;
       }
 
+      scrollToTop();
       event.preventDefault();
       if (typeof event.stopImmediatePropagation === "function") {
         event.stopImmediatePropagation();
@@ -270,6 +307,7 @@
     var timer = window.setInterval(function () {
       attempts += 1;
       hideTicketRows();
+      wrapNativeValidation();
       bindSubmitInterceptor();
       if (attempts >= 100) {
         window.clearInterval(timer);
