@@ -65,14 +65,39 @@
 
   function scrollToTop() {
     try {
+      var feedback = document.getElementById("page-feedback-message");
+      if (feedback && typeof feedback.scrollIntoView === "function") {
+        feedback.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+
       var contentMain = document.getElementById("content-main");
+      var container = document.getElementById("container");
+      var targets = [];
       if (contentMain) {
-        contentMain.scrollTop = 0;
+        targets.push(contentMain);
+      }
+      if (container) {
+        targets.push(container);
+      }
+      if (document.scrollingElement) {
+        targets.push(document.scrollingElement);
+      }
+      targets.push(document.documentElement);
+      targets.push(document.body);
+
+      var i;
+      for (i = 0; i < targets.length; i++) {
+        if (targets[i]) {
+          targets[i].scrollTop = 0;
+        }
       }
       if (window.$j) {
         $j(document).scrollTop(0);
         if (contentMain) {
           $j(contentMain).scrollTop(0);
+        }
+        if (container) {
+          $j(container).scrollTop(0);
         }
       } else {
         document.documentElement.scrollTop = 0;
@@ -99,7 +124,7 @@
     }
   }
 
-  function findFieldByRowLabel(labelText, fieldType) {
+  function findFieldByRowLabel(labelText, fieldType, allowDisabled) {
     var target = text(labelText).toLowerCase();
     var $found = $j();
 
@@ -116,9 +141,13 @@
       }
 
       if (fieldType === "select") {
-        $found = $row.find("select").filter(":enabled").first();
+        $found = allowDisabled
+          ? $row.find("select").first()
+          : $row.find("select").filter(":enabled").first();
       } else {
-        $found = $row.find("input[type='text'], input:not([type]), textarea").filter(":enabled").first();
+        $found = allowDisabled
+          ? $row.find("input[type='text'], input:not([type]), textarea").first()
+          : $row.find("input[type='text'], input:not([type]), textarea").filter(":enabled").first();
       }
       return false;
     });
@@ -126,7 +155,7 @@
     return $found;
   }
 
-  function findField(selectors, rowLabel, fieldType) {
+  function findField(selectors, rowLabel, fieldType, allowDisabled) {
     var i;
     for (i = 0; i < selectors.length; i++) {
       var $el = $j(selectors[i]).filter(":enabled").first();
@@ -134,7 +163,15 @@
         return $el;
       }
     }
-    return findFieldByRowLabel(rowLabel, fieldType);
+    if (allowDisabled) {
+      for (i = 0; i < selectors.length; i++) {
+        var $fallback = $j(selectors[i]).first();
+        if ($fallback.length) {
+          return $fallback;
+        }
+      }
+    }
+    return findFieldByRowLabel(rowLabel, fieldType, allowDisabled);
   }
 
   function hasSelectValue(selector) {
@@ -198,13 +235,20 @@
         rowLabel: "City/Town of Residence - Student",
         fieldType: "select",
         errorId: "#invalid_city_residence_student_error"
+      },
+      {
+        selectors: ['select[name="fteid"]'],
+        rowLabel: "Full-Time Equivalency",
+        fieldType: "select",
+        errorId: "#invalid_fte_error",
+        allowDisabled: true
       }
     ];
     var i;
 
     hideCustomErrors();
     for (i = 0; i < checks.length; i++) {
-      var clearField = findField(checks[i].selectors, checks[i].rowLabel, checks[i].fieldType);
+      var clearField = findField(checks[i].selectors, checks[i].rowLabel, checks[i].fieldType, checks[i].allowDisabled);
       if (clearField.length) {
         clearFieldState(clearField);
       }
@@ -212,7 +256,7 @@
 
     for (i = 0; i < checks.length; i++) {
       var check = checks[i];
-      var $field = findField(check.selectors, check.rowLabel, check.fieldType);
+      var $field = findField(check.selectors, check.rowLabel, check.fieldType, check.allowDisabled);
       var filled = true;
       if (!$field.length) {
         continue;
@@ -265,6 +309,7 @@
     ensureErrorItem("invalid_sif_fte_error", "You must select a SIF FTE value.");
     ensureErrorItem("invalid_birth_city_error", "You must enter a City/Town of Birth.");
     ensureErrorItem("invalid_city_residence_student_error", "You must select a City/Town of Residence - Student.");
+    ensureErrorItem("invalid_fte_error", "You must select a Full-Time Equivalency.");
 
     form.addEventListener("invalid", function () {
       scrollToTop();
